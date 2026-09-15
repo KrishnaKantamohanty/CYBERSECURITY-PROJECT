@@ -1,0 +1,7 @@
+streamlit==1.61.1
+cryptography==41.0.4
+bcrypt==4.0.1
+pyotp==2.9.0
+requests==2.31.0
+qrcode>=8.0
+pillow>=9.1.0
