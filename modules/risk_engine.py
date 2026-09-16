@@ -115,6 +115,20 @@ def calculate_overall_security_score() -> Tuple[int, str, List[Dict[str, Any]]]:
         base_score -= deduction
         breakdown.append({"category": "File Integrity", "impact": f"-{deduction}", "detail": f"{len(mismatches)} SHA-256 hash mismatch(es) recorded."})
 
+    # 6. Network Port Scanner Findings
+    net_findings = [f for f in findings if f["source_tool"] == "Network Scanner" and f["severity"] in ("MEDIUM", "HIGH", "CRITICAL")]
+    if net_findings:
+        deduction = min(25, len(net_findings) * 8)
+        base_score -= deduction
+        breakdown.append({"category": "Network & Port Security", "impact": f"-{deduction}", "detail": f"{len(net_findings)} exposed service/port risk finding(s)."})
+
+    # 7. Packet Analyzer Cleartext & Threat Findings
+    pcap_threats = [f for f in findings if f["source_tool"] == "Packet Analyzer" and f["severity"] in ("HIGH", "CRITICAL")]
+    if pcap_threats:
+        deduction = min(30, len(pcap_threats) * 12)
+        base_score -= deduction
+        breakdown.append({"category": "Traffic & Packet Analysis", "impact": f"-{deduction}", "detail": f"{len(pcap_threats)} packet traffic threat(s) detected."})
+
     # Final score clamping
     final_score = max(0, min(100, base_score))
 

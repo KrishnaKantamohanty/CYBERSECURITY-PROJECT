@@ -91,15 +91,16 @@ def generate_html_report() -> str:
     </div>
 
     <div class="card">
-        <h2>Session Counter Statistics</h2>
+        <h2>Session Audit Statistics</h2>
         <p><strong>Total Security Checks:</strong> {session_data['stats']['security_checks']}</p>
-        <p><strong>Files Processed:</strong> {session_data['stats']['files_processed']}</p>
-        <p><strong>Phishing / URL Checks:</strong> {session_data['stats']['phishing_checks']}</p>
+        <p><strong>Files Processed & Scanned:</strong> {session_data['stats']['files_processed']}</p>
+        <p><strong>Network & Port Audits:</strong> {session_data['stats'].get('network_checks', session_data['stats']['security_checks'])}</p>
+        <p><strong>Phishing & IOC Checks:</strong> {session_data['stats']['phishing_checks']}</p>
         <p><strong>File Integrity Checks:</strong> {session_data['stats']['integrity_checks']}</p>
     </div>
 
     <div class="footer">
-        <p><strong>Disclaimer:</strong> This security report is generated for educational and local defensive assessment purposes. Clean scan results do not guarantee absolute safety. Confidential passwords and API keys are strictly excluded from report logs.</p>
+        <p><strong>Disclaimer:</strong> This security report is generated for defensive and educational security assessment purposes. Clean scan results do not guarantee absolute safety. Confidential passwords and secret API keys are strictly excluded from report logs.</p>
     </div>
 </body>
 </html>"""

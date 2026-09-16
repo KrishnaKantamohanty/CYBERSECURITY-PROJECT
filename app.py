@@ -18,6 +18,7 @@ from modules import (
     security_lab,
     security_health,
     login_page,
+    packet_analyzer,
 )
 from utils.theme import inject_theme, page_header, section_card
 from utils.security import get_session_stats
@@ -323,13 +324,15 @@ elif choice == "🦠 Malware & File Security":
 # 🌐 NETWORK & WEB SECURITY PAGE
 # =============================================================================
 elif choice == "🌐 Network & Web Security":
-    tab1, tab2 = st.tabs(["Network & Phishing Tools", "IOC Analyzer"])
+    tab1, tab2, tab3 = st.tabs(["🌐 Network Recon & Port Scanner", "📡 PCAP Packet Analyzer", "🔎 Threat IOC & Phishing"])
     with tab1:
         network_tools.render()
+    with tab2:
+        packet_analyzer.render()
+    with tab3:
+        ioc_analyzer.render()
         st.markdown("---")
         phishing_detector.render()
-    with tab2:
-        ioc_analyzer.render()
 
 # =============================================================================
 # 🚨 SECURITY CENTER & RISK ENGINE PAGE
