@@ -19,6 +19,7 @@ from modules import (
     security_health,
     login_page,
     packet_analyzer,
+    log_analyzer,
 )
 from utils.theme import inject_theme, page_header, section_card
 from utils.security import get_session_stats
@@ -47,6 +48,7 @@ PAGES = [
     "🔒 Encryption & Cipher",
     "🦠 Malware & File Security",
     "🌐 Network & Web Security",
+    "📋 SIEM Log Analyzer",
     "🚨 Security Center & Risk Engine",
     "📊 Reports & Exporter",
     "🧪 Security Lab",
@@ -333,6 +335,12 @@ elif choice == "🌐 Network & Web Security":
         ioc_analyzer.render()
         st.markdown("---")
         phishing_detector.render()
+
+# =============================================================================
+# 📋 SIEM LOG ANALYZER PAGE
+# =============================================================================
+elif choice == "📋 SIEM Log Analyzer":
+    log_analyzer.render()
 
 # =============================================================================
 # 🚨 SECURITY CENTER & RISK ENGINE PAGE
