@@ -7,69 +7,86 @@ def inject_theme() -> None:
         <style>
         :root {
             color-scheme: dark;
+            --cp-cyan: #00ffff;
+            --cp-pink: #ff00ff;
+            --cp-yellow: #f3e600;
+            --cp-bg: #09090b;
+            --cp-bg-card: rgba(15, 15, 20, 0.85);
+            --cp-text: #00ffcc;
         }
         body {
-            background: #050c16;
-            color: #e4f7ff;
+            background: var(--cp-bg);
+            color: var(--cp-text);
+            font-family: "Courier New", Courier, monospace;
         }
         [data-testid="stAppViewContainer"] {
-            background: linear-gradient(180deg, #071220 0%, #071013 100%);
-            color: #e4f7ff;
+            background: var(--cp-bg);
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 30px 30px;
+            color: var(--cp-text);
         }
         [data-testid="stSidebar"] {
-            background: radial-gradient(circle at top left, rgba(0, 255, 255, 0.12), transparent 40%), #02121f;
-            border-right: 1px solid rgba(0, 255, 255, 0.12);
-            box-shadow: inset 0 0 35px rgba(0, 255, 255, 0.08);
+            background: rgba(10, 10, 15, 0.95);
+            border-right: 2px solid var(--cp-pink);
+            box-shadow: inset 0 0 20px rgba(255, 0, 255, 0.1);
         }
-        .stSidebar .css-1d391kg {
-            color: #8ef7ff;
-        }
-        .css-18e3th9 {
-            padding-top: 1rem;
-        }
-        .css-1v0mbdj {
-            color: #e7f7ff;
+        .stSidebar .css-1d391kg, .css-1v0mbdj {
+            color: var(--cp-cyan);
+            font-family: "Courier New", Courier, monospace;
         }
         .stButton>button {
-            background: linear-gradient(135deg, #08f7ff 0%, #0d6e9f 100%) !important;
-            color: #f8ffff !important;
-            border: 1px solid rgba(0, 255, 255, 0.25) !important;
-            border-radius: 8px !important;
-            box-shadow: 0 0 18px rgba(0, 255, 255, 0.16) !important;
-            transition: transform 0.22s ease, box-shadow 0.22s ease;
+            background: transparent !important;
+            color: var(--cp-cyan) !important;
+            border: 1px solid var(--cp-cyan) !important;
+            border-radius: 0 !important;
+            box-shadow: 0 0 5px var(--cp-cyan), inset 0 0 5px var(--cp-cyan) !important;
+            text-transform: uppercase;
+            font-weight: bold;
+            font-family: "Courier New", Courier, monospace;
+            transition: all 0.2s ease;
             min-height: 3rem;
-            white-space: normal;
         }
         .stButton>button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 0 36px rgba(0, 255, 255, 0.28) !important;
+            background: rgba(0, 255, 255, 0.1) !important;
+            box-shadow: 0 0 15px var(--cp-cyan), inset 0 0 10px var(--cp-cyan) !important;
+            border-color: var(--cp-pink) !important;
+            color: var(--cp-pink) !important;
         }
         .stCheckbox>div>div {
-            color: #e4f7ff;
+            color: var(--cp-text);
         }
-        .stTextInput>div>div>input {
-            background: rgba(255,255,255,0.04) !important;
-            color: #e4f7ff !important;
-            border: 1px solid rgba(255,255,255,0.12) !important;
+        .stTextInput>div>div>input, .stTextArea>div>div>textarea {
+            background: rgba(0, 255, 255, 0.05) !important;
+            color: var(--cp-pink) !important;
+            border: 1px solid var(--cp-cyan) !important;
+            border-radius: 0 !important;
+            font-family: "Courier New", Courier, monospace;
         }
-        .stTextArea>div>div>textarea {
-            background: rgba(255,255,255,0.04) !important;
-            color: #e4f7ff !important;
-            border: 1px solid rgba(255,255,255,0.12) !important;
+        .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus {
+            border-color: var(--cp-pink) !important;
+            box-shadow: 0 0 10px var(--cp-pink) !important;
         }
         h1, h2, h3, h4, h5 {
-            color: #e4f7ff;
+            color: var(--cp-cyan);
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.1em;
+            text-shadow: 0 0 5px var(--cp-cyan);
         }
         .hero-card {
-            background: rgba(2, 28, 48, 0.90);
-            border: 1px solid rgba(0, 209, 255, 0.18);
-            border-radius: 8px;
+            background: var(--cp-bg-card);
+            border: 1px solid var(--cp-pink);
+            border-left: 5px solid var(--cp-cyan);
+            border-radius: 0;
             padding: 26px;
             margin-bottom: 26px;
             display: flex;
             align-items: center;
             gap: 20px;
-            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.30);
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.2);
             backdrop-filter: blur(8px);
         }
         .hero-card .hero-icon {
@@ -77,33 +94,34 @@ def inject_theme() -> None:
             height: 72px;
             display: grid;
             place-items: center;
-            background: radial-gradient(circle at top left, rgba(0, 255, 255, 0.28), rgba(10, 35, 55, 0.95));
-            border-radius: 8px;
-            border: 1px solid rgba(0, 255, 255, 0.24);
+            background: transparent;
+            border: 1px solid var(--cp-cyan);
             font-size: 2.2rem;
-            color: #d1f9ff;
-            box-shadow: 0 0 24px rgba(0, 255, 255, 0.18);
+            color: var(--cp-yellow);
+            box-shadow: 0 0 10px var(--cp-cyan), inset 0 0 10px var(--cp-cyan);
+            border-radius: 0;
         }
         .hero-card h1 {
             margin: 0;
             font-size: 2.4rem;
-            letter-spacing: 0.5px;
+            color: var(--cp-pink);
+            text-shadow: 0 0 10px var(--cp-pink);
         }
         .hero-card p {
             margin: 0.25rem 0 0;
-            opacity: 0.82;
+            color: var(--cp-text);
             line-height: 1.5;
         }
         .section-card {
-            background: rgba(0, 18, 28, 0.88);
-            border: 1px solid rgba(0, 203, 255, 0.18);
-            border-radius: 8px;
+            background: var(--cp-bg-card);
+            border: 1px solid var(--cp-cyan);
+            border-radius: 0;
             padding: 22px;
             margin-bottom: 18px;
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.07);
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.1);
         }
         .divider {
-            border-top: 1px solid rgba(0, 255, 255, 0.16);
+            border-top: 1px dashed var(--cp-pink);
             margin: 1.5rem 0;
         }
         .dashboard-grid {
@@ -113,12 +131,13 @@ def inject_theme() -> None:
             margin-bottom: 24px;
         }
         .popup-panel {
-            background: rgba(1, 12, 24, 0.95);
-            border: 1px solid rgba(0, 255, 255, 0.18);
-            border-radius: 8px;
+            background: var(--cp-bg-card);
+            border: 1px solid var(--cp-cyan);
+            border-left: 4px solid var(--cp-pink);
+            border-radius: 0;
             padding: 24px;
             max-width: 980px;
-            box-shadow: 0 0 60px rgba(0, 255, 255, 0.16);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
             animation: popupEntry 0.35s ease-out;
         }
         .popup-title {
@@ -127,12 +146,12 @@ def inject_theme() -> None:
             letter-spacing: 0.14em;
             text-transform: uppercase;
             margin-bottom: 10px;
-            color: #9bf4ff;
+            color: var(--cp-yellow);
+            text-shadow: 0 0 5px var(--cp-yellow);
         }
         .popup-subtitle {
-            color: rgba(255, 255, 255, 0.72);
+            color: var(--cp-cyan);
             margin-bottom: 24px;
-            line-height: 1.6;
         }
         .popup-grid {
             display: grid;
@@ -140,34 +159,35 @@ def inject_theme() -> None:
             gap: 16px;
         }
         .popup-option {
-            background: rgba(0, 29, 53, 0.95);
-            border: 1px solid rgba(0, 255, 255, 0.14);
-            border-radius: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid var(--cp-cyan);
+            border-radius: 0;
             padding: 18px 16px;
             text-align: center;
             font-weight: 700;
-            color: #c8f7ff;
-            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+            color: var(--cp-pink);
+            text-transform: uppercase;
+            transition: all 0.2s ease;
             cursor: pointer;
-            box-shadow: 0 0 18px rgba(0, 255, 255, 0.08);
         }
         .popup-option:hover {
-            transform: translateY(-2px);
-            background: rgba(0, 255, 255, 0.10);
-            box-shadow: 0 0 26px rgba(0, 255, 255, 0.16);
+            transform: scale(1.05);
+            background: rgba(255, 0, 255, 0.1);
+            border-color: var(--cp-pink);
+            box-shadow: 0 0 15px var(--cp-pink);
+            color: var(--cp-yellow);
         }
         .popup-note {
             margin-top: 18px;
-            color: rgba(255, 255, 255, 0.62);
+            color: var(--cp-cyan);
+            opacity: 0.7;
             font-size: 0.92rem;
         }
         @keyframes popupEntry {
             from { opacity: 0; transform: translateY(-16px); }
             to { opacity: 1; transform: translateY(0); }
         }
-        .dashboard-card {
-            display: none;
-        }
+        .dashboard-card { display: none; }
         .metric-card {
             min-height: 190px;
             position: relative;
@@ -177,7 +197,7 @@ def inject_theme() -> None:
             justify-content: space-between;
             align-items: center;
             margin-bottom: 18px;
-            color: #84dfff;
+            color: var(--cp-pink);
             font-size: 0.94rem;
             letter-spacing: 0.08em;
             text-transform: uppercase;
@@ -185,26 +205,27 @@ def inject_theme() -> None:
         .metric-value {
             font-size: 2.75rem;
             font-weight: 700;
-            color: #9bf1ff;
+            color: var(--cp-cyan);
+            text-shadow: 0 0 10px var(--cp-cyan);
         }
         .metric-meta {
-            color: rgba(255, 255, 255, 0.68);
+            color: var(--cp-text);
             margin-bottom: 14px;
         }
         .metric-pill {
             display: inline-block;
             padding: 8px 16px;
-            background: rgba(0, 255, 255, 0.12);
-            border-radius: 999px;
-            color: #b7f8ff;
+            background: transparent;
+            border: 1px solid var(--cp-yellow);
+            border-radius: 0;
+            color: var(--cp-yellow);
             font-size: 0.82rem;
-            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px var(--cp-yellow);
         }
-        .status-card {
-            grid-column: span 1;
-        }
+        .status-card { grid-column: span 1; }
         .status-title {
-            color: #97f8ff;
+            color: var(--cp-pink);
             font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 0.12em;
@@ -213,30 +234,29 @@ def inject_theme() -> None:
         .status-value {
             font-size: 3rem;
             font-weight: 800;
-            color: #6ef6ff;
+            color: var(--cp-yellow);
             margin-bottom: 12px;
+            text-shadow: 0 0 10px var(--cp-yellow);
         }
-        .status-detail {
-            color: rgba(255, 255, 255, 0.72);
-            line-height: 1.6;
-        }
+        .status-detail { color: var(--cp-text); }
         .chart-card, .chart-summary, .activity-card, .calendar-card, .progress-card {
             min-height: 310px;
         }
         .card-title {
             font-size: 1rem;
             text-transform: uppercase;
-            color: #89e7ff;
+            color: var(--cp-cyan);
             letter-spacing: 0.12em;
             margin-bottom: 20px;
+            border-bottom: 1px solid var(--cp-cyan);
+            padding-bottom: 5px;
         }
         .line-chart {
             height: 170px;
-            background: linear-gradient(180deg, rgba(3, 35, 61, 0.95), rgba(4, 17, 30, 0.75));
-            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--cp-cyan);
             position: relative;
             overflow: hidden;
-            box-shadow: inset 0 0 25px rgba(0, 191, 255, 0.08);
         }
         .line-plot {
             position: absolute;
@@ -244,13 +264,13 @@ def inject_theme() -> None:
             left: 16px;
             right: 16px;
             bottom: 16px;
-            background: linear-gradient(135deg, transparent 20%, rgba(0, 255, 255, 0.08) 60%);
-            border-radius: 14px;
+            background: linear-gradient(135deg, transparent 20%, rgba(255, 0, 255, 0.1) 60%);
+            border: 1px solid rgba(0, 255, 255, 0.2);
         }
         .chart-legend {
             display: flex;
             justify-content: space-between;
-            color: rgba(255, 255, 255, 0.65);
+            color: var(--cp-cyan);
             margin-top: 16px;
             font-size: 0.88rem;
         }
@@ -262,41 +282,45 @@ def inject_theme() -> None:
             display: block;
             margin-bottom: 6px;
             font-size: 0.9rem;
-            color: #b8f7ff;
+            color: var(--cp-pink);
+            text-transform: uppercase;
         }
         .bar-row {
             height: 10px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(0, 255, 255, 0.1);
+            border: 1px solid var(--cp-cyan);
             overflow: hidden;
         }
         .bar-row div {
             height: 100%;
-            background: linear-gradient(90deg, #7ef0ff, #2e87f1);
+            background: var(--cp-yellow);
+            box-shadow: 0 0 10px var(--cp-yellow);
         }
         .calendar-header {
             font-weight: 700;
             margin-bottom: 18px;
             font-size: 1rem;
-            color: #7ee3ff;
+            color: var(--cp-pink);
         }
         .calendar-grid {
             display: grid;
             grid-template-columns: repeat(7, minmax(0, 1fr));
             gap: 8px;
-            color: rgba(255, 255, 255, 0.72);
+            color: var(--cp-text);
         }
         .calendar-day {
             min-height: 42px;
             display: grid;
             place-items: center;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(0, 255, 255, 0.05);
+            border: 1px solid rgba(0, 255, 255, 0.2);
         }
         .calendar-day.active {
-            background: linear-gradient(135deg, rgba(0, 214, 255, 0.24), rgba(2, 112, 175, 0.24));
-            color: #d8fbff;
+            background: rgba(255, 0, 255, 0.2);
+            border: 1px solid var(--cp-pink);
+            color: var(--cp-yellow);
             font-weight: 700;
+            box-shadow: 0 0 10px var(--cp-pink);
         }
         .inline-metrics {
             display: grid;
@@ -304,204 +328,8 @@ def inject_theme() -> None:
             gap: 12px;
         }
         .inline-metrics div {
-            background: rgba(0, 255, 255, 0.05);
-            border: 1px solid rgba(0, 255, 255, 0.12);
-            border-radius: 18px;
-            padding: 14px;
-            text-align: center;
-        }
-        .metric-ring {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 70px;
-            height: 70px;
-        .popup-title {
-            font-size: 1.45rem;
-            font-weight: 800;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-            margin-bottom: 10px;
-            color: #9bf4ff;
-        }
-        .popup-subtitle {
-            color: rgba(255, 255, 255, 0.72);
-            margin-bottom: 24px;
-            line-height: 1.6;
-        }
-        .popup-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-            gap: 16px;
-        }
-        .popup-option {
-            background: rgba(0, 29, 53, 0.95);
-            border: 1px solid rgba(0, 255, 255, 0.14);
-            border-radius: 20px;
-            padding: 18px 16px;
-            text-align: center;
-            font-weight: 700;
-            color: #c8f7ff;
-            transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
-            cursor: pointer;
-            box-shadow: 0 0 18px rgba(0, 255, 255, 0.08);
-        }
-        .popup-option:hover {
-            transform: translateY(-2px);
-            background: rgba(0, 255, 255, 0.10);
-            box-shadow: 0 0 26px rgba(0, 255, 255, 0.16);
-        }
-        .popup-note {
-            margin-top: 18px;
-            color: rgba(255, 255, 255, 0.62);
-            font-size: 0.92rem;
-        }
-        @keyframes popupEntry {
-            from { opacity: 0; transform: translateY(-16px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .dashboard-card {
-            display: none;
-        }
-        .metric-card {
-            min-height: 190px;
-            position: relative;
-        }
-        .metric-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 18px;
-            color: #84dfff;
-            font-size: 0.94rem;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-        }
-        .metric-value {
-            font-size: 2.75rem;
-            font-weight: 700;
-            color: #9bf1ff;
-        }
-        .metric-meta {
-            color: rgba(255, 255, 255, 0.68);
-            margin-bottom: 14px;
-        }
-        .metric-pill {
-            display: inline-block;
-            padding: 8px 16px;
-            background: rgba(0, 255, 255, 0.12);
-            border-radius: 999px;
-            color: #b7f8ff;
-            font-size: 0.82rem;
-            letter-spacing: 0.08em;
-        }
-        .status-card {
-            grid-column: span 1;
-        }
-        .status-title {
-            color: #97f8ff;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            margin-bottom: 20px;
-        }
-        .status-value {
-            font-size: 3rem;
-            font-weight: 800;
-            color: #6ef6ff;
-            margin-bottom: 12px;
-        }
-        .status-detail {
-            color: rgba(255, 255, 255, 0.72);
-            line-height: 1.6;
-        }
-        .chart-card, .chart-summary, .activity-card, .calendar-card, .progress-card {
-            min-height: 310px;
-        }
-        .card-title {
-            font-size: 1rem;
-            text-transform: uppercase;
-            color: #89e7ff;
-            letter-spacing: 0.12em;
-            margin-bottom: 20px;
-        }
-        .line-chart {
-            height: 170px;
-            background: linear-gradient(180deg, rgba(3, 35, 61, 0.95), rgba(4, 17, 30, 0.75));
-            border-radius: 18px;
-            position: relative;
-            overflow: hidden;
-            box-shadow: inset 0 0 25px rgba(0, 191, 255, 0.08);
-        }
-        .line-plot {
-            position: absolute;
-            top: 24px;
-            left: 16px;
-            right: 16px;
-            bottom: 16px;
-            background: linear-gradient(135deg, transparent 20%, rgba(0, 255, 255, 0.08) 60%);
-            border-radius: 14px;
-        }
-        .chart-legend {
-            display: flex;
-            justify-content: space-between;
-            color: rgba(255, 255, 255, 0.65);
-            margin-top: 16px;
-            font-size: 0.88rem;
-        }
-        .chart-bars {
-            display: grid;
-            gap: 14px;
-        }
-        .chart-bars span {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 0.9rem;
-            color: #b8f7ff;
-        }
-        .bar-row {
-            height: 10px;
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.08);
-            overflow: hidden;
-        }
-        .bar-row div {
-            height: 100%;
-            background: linear-gradient(90deg, #7ef0ff, #2e87f1);
-        }
-        .calendar-header {
-            font-weight: 700;
-            margin-bottom: 18px;
-            font-size: 1rem;
-            color: #7ee3ff;
-        }
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, minmax(0, 1fr));
-            gap: 8px;
-            color: rgba(255, 255, 255, 0.72);
-        }
-        .calendar-day {
-            min-height: 42px;
-            display: grid;
-            place-items: center;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.04);
-        }
-        .calendar-day.active {
-            background: linear-gradient(135deg, rgba(0, 214, 255, 0.24), rgba(2, 112, 175, 0.24));
-            color: #d8fbff;
-            font-weight: 700;
-        }
-        .inline-metrics {
-            display: grid;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 12px;
-        }
-        .inline-metrics div {
-            background: rgba(0, 255, 255, 0.05);
-            border: 1px solid rgba(0, 255, 255, 0.12);
-            border-radius: 18px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--cp-cyan);
             padding: 14px;
             text-align: center;
         }
@@ -512,75 +340,80 @@ def inject_theme() -> None:
             width: 70px;
             height: 70px;
             margin-bottom: 10px;
-            border-radius: 50%;
-            background: rgba(0, 255, 255, 0.08);
-            color: #c6f8ff;
+            border-radius: 0;
+            background: transparent;
+            border: 2px solid var(--cp-cyan);
+            color: var(--cp-cyan);
             font-weight: 700;
-            box-shadow: inset 0 0 18px rgba(0, 255, 255, 0.12);
+            box-shadow: inset 0 0 10px var(--cp-cyan), 0 0 10px var(--cp-cyan);
         }
         .badge-very-weak {
-            background: rgba(239, 68, 68, 0.2);
-            color: #fca5a5;
-            border: 1px solid #ef4444;
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff0000;
+            border: 1px solid #ff0000;
             padding: 6px 14px;
-            border-radius: 6px;
             font-weight: 700;
             display: inline-block;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px #ff0000;
         }
         .badge-weak {
-            background: rgba(249, 115, 22, 0.2);
-            color: #fdba74;
-            border: 1px solid #f97316;
+            background: rgba(255, 128, 0, 0.2);
+            color: #ff8000;
+            border: 1px solid #ff8000;
             padding: 6px 14px;
-            border-radius: 6px;
             font-weight: 700;
             display: inline-block;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px #ff8000;
         }
         .badge-moderate {
-            background: rgba(234, 179, 8, 0.2);
-            color: #fde047;
-            border: 1px solid #eab308;
+            background: rgba(255, 255, 0, 0.2);
+            color: var(--cp-yellow);
+            border: 1px solid var(--cp-yellow);
             padding: 6px 14px;
-            border-radius: 6px;
             font-weight: 700;
             display: inline-block;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px var(--cp-yellow);
         }
         .badge-strong {
-            background: rgba(34, 197, 94, 0.2);
-            color: #86efac;
-            border: 1px solid #22c55e;
+            background: rgba(0, 255, 255, 0.2);
+            color: var(--cp-cyan);
+            border: 1px solid var(--cp-cyan);
             padding: 6px 14px;
-            border-radius: 6px;
             font-weight: 700;
             display: inline-block;
+            text-transform: uppercase;
+            box-shadow: 0 0 5px var(--cp-cyan);
         }
         .badge-very-strong {
-            background: rgba(16, 185, 129, 0.25);
-            color: #6ee7b7;
-            border: 1px solid #10b981;
-            box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+            border: 1px solid #00ff00;
             padding: 6px 14px;
-            border-radius: 6px;
             font-weight: 700;
             display: inline-block;
+            text-transform: uppercase;
+            box-shadow: 0 0 8px #00ff00;
         }
         .result-card {
-            background: rgba(4, 20, 36, 0.85);
-            border: 1px solid rgba(0, 255, 255, 0.16);
-            border-radius: 8px;
+            background: var(--cp-bg-card);
+            border: 1px solid var(--cp-pink);
             padding: 20px;
             margin-top: 16px;
             margin-bottom: 16px;
+            box-shadow: 0 0 10px rgba(255, 0, 255, 0.2);
         }
         .activity-item {
             padding: 10px 14px;
-            border-bottom: 1px solid rgba(255,255,255,0.06);
+            border-bottom: 1px dashed var(--cp-cyan);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
         .activity-time {
-            color: #7dd3fc;
+            color: var(--cp-yellow);
             font-size: 0.82rem;
             font-family: monospace;
         }
