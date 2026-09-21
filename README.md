@@ -86,7 +86,7 @@ cybersecurity_toolkit/
 
 1. Clone or download the repository:
    ```bash
-   git clone <repository-url>
+   git clone <CYBERSECURITY-PROJECT>
    cd "CYBERSECURITY PROJECT"
    ```
 
