@@ -1,7 +1,7 @@
 """
 SIEM-Style Log Analyzer
 =======================
-Supports:
+Pure-Python implementation (no pandas) with:
   - Upload real log files (.log, .txt, .csv, .json, .evtx text export)
   - Auto-parse common formats: syslog, Apache/Nginx, Windows Event, JSON, CSV
   - 10 SIEM-grade filters (severity, category, time, protocol, action, MITRE,
@@ -15,13 +15,11 @@ import re
 import csv
 import json
 import random
-import hashlib
 from datetime import datetime, timedelta
 from io import StringIO
 from typing import Any
 
 import streamlit as st
-import pandas as pd
 
 from utils.theme import page_header
 
@@ -29,31 +27,31 @@ from utils.theme import page_header
 # CONSTANTS
 # ---------------------------------------------------------------------------
 
-SEVERITIES   = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "DEBUG"]
-CATEGORIES   = [
+SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "DEBUG"]
+CATEGORIES = [
     "Authentication", "Network", "File System", "System",
     "Threat Detection", "Audit / Compliance", "Endpoint", "Email / Phishing",
 ]
-PROTOCOLS    = ["TCP", "UDP", "HTTP", "HTTPS", "SSH", "FTP", "DNS", "ICMP", "SMTP", "RDP"]
+PROTOCOLS = ["TCP", "UDP", "HTTP", "HTTPS", "SSH", "FTP", "DNS", "ICMP", "SMTP", "RDP"]
 MITRE_TACTICS = [
     "Initial Access", "Execution", "Persistence", "Privilege Escalation",
     "Defense Evasion", "Credential Access", "Discovery", "Lateral Movement",
     "Collection", "Exfiltration", "Impact", "Command and Control",
     "Reconnaissance", "N/A",
 ]
-ACTIONS      = ["ALLOW", "BLOCK", "ALERT", "DENY", "LOG", "DROP", "QUARANTINE"]
-SOURCES      = [
+ACTIONS = ["ALLOW", "BLOCK", "ALERT", "DENY", "LOG", "DROP", "QUARANTINE"]
+SOURCES = [
     "10.0.0.12", "192.168.1.5", "172.16.3.88", "203.0.113.45", "198.51.100.7",
     "10.10.20.33", "192.168.0.1", "DESKTOP-W7XA", "SERVER-DC01", "LAPTOP-HR03",
     "fw-edge-01", "ids-sensor-02", "web-proxy-03", "auth-srv-01", "db-server-02",
 ]
-EVENT_IDS    = [
+EVENT_IDS = [
     4624, 4625, 4648, 4672, 4720, 4726, 4776, 4771,
     4688, 4698, 4702, 5140, 5145, 7045, 7040, 1102, 4719, 1001, 1002, 3000,
 ]
-USERS  = ["alice", "bob", "charlie", "dave", "admin", "svcaccount", "guest", "john.doe"]
-FILES  = ["passwords.txt", "budget_2024.xlsx", "employee_data.csv", "system.ini"]
-SVCS   = ["UpdaterService", "RemoteHelper", "BackupAgent", "SysMonitor"]
+USERS = ["alice", "bob", "charlie", "dave", "admin", "svcaccount", "guest", "john.doe"]
+FILES_LIST = ["passwords.txt", "budget_2024.xlsx", "employee_data.csv", "system.ini"]
+SVCS = ["UpdaterService", "RemoteHelper", "BackupAgent", "SysMonitor"]
 
 _LOG_TEMPLATES: dict[str, list[tuple[str, str, str]]] = {
     "Authentication": [
@@ -118,82 +116,93 @@ _LOG_TEMPLATES: dict[str, list[tuple[str, str, str]]] = {
 
 
 # ---------------------------------------------------------------------------
+# LOG ROW TYPE
+# ---------------------------------------------------------------------------
+# Each log entry is a plain dict with these keys:
+#   Timestamp (datetime), Event ID (int), Severity (str), Category (str),
+#   Source (str), Protocol (str), Action (str), MITRE Tactic (str),
+#   Message (str), Anomaly Score (int), Anomaly (str "YES"/"NO"), _raw (str)
+# ---------------------------------------------------------------------------
+
+
+def _make_row(
+    ts: datetime, eid: int, sev: str, cat: str, src: str,
+    proto: str, action: str, mitre: str, msg: str,
+    anomaly_score: int, raw: str,
+) -> dict[str, Any]:
+    return {
+        "Timestamp": ts,
+        "Event ID": eid,
+        "Severity": sev,
+        "Category": cat,
+        "Source": src,
+        "Protocol": proto,
+        "Action": action,
+        "MITRE Tactic": mitre,
+        "Message": msg,
+        "Anomaly Score": anomaly_score,
+        "Anomaly": "YES" if anomaly_score >= 70 else "NO",
+        "_raw": raw,
+    }
+
+
+# ---------------------------------------------------------------------------
 # SYNTHETIC SAMPLE LOG GENERATION
 # ---------------------------------------------------------------------------
 
-@st.cache_data(ttl=300, show_spinner=False)
-def _generate_sample_logs(n: int = 300) -> pd.DataFrame:
+def _generate_sample_logs(n: int = 300) -> list[dict[str, Any]]:
     random.seed(42)
     now = datetime.now()
     rows: list[dict[str, Any]] = []
-    for i in range(n):
-        category  = random.choice(CATEGORIES)
+    for _ in range(n):
+        category = random.choice(CATEGORIES)
         templates = _LOG_TEMPLATES.get(category, _LOG_TEMPLATES["System"])
         tmpl, default_sev, mitre = random.choice(templates)
-        src  = random.choice(SOURCES)
+        src = random.choice(SOURCES)
         user = random.choice(USERS)
-        file_ = random.choice(FILES)
-        svc   = random.choice(SVCS)
-        msg   = tmpl.format(src=src, user=user, file=file_, svc=svc)
-        sev   = default_sev if random.random() < 0.75 else random.choice(SEVERITIES[:4])
-        proto  = random.choice(PROTOCOLS)
+        file_ = random.choice(FILES_LIST)
+        svc = random.choice(SVCS)
+        msg = tmpl.format(src=src, user=user, file=file_, svc=svc)
+        sev = default_sev if random.random() < 0.75 else random.choice(SEVERITIES[:4])
+        proto = random.choice(PROTOCOLS)
         action = random.choice(ACTIONS)
-        eid    = random.choice(EVENT_IDS)
-        ts     = now - timedelta(minutes=random.randint(0, 7 * 24 * 60))
+        eid = random.choice(EVENT_IDS)
+        ts = now - timedelta(minutes=random.randint(0, 7 * 24 * 60))
         base_a = {"CRITICAL": 85, "HIGH": 65, "MEDIUM": 40, "LOW": 20, "INFO": 10, "DEBUG": 5}
         anomaly = min(100, base_a.get(sev, 10) + random.randint(-10, 15))
         raw = (
             f"[{ts.strftime('%Y-%m-%dT%H:%M:%S')}] [{sev}] src={src} "
             f"proto={proto} event_id={eid} action={action} msg=\"{msg}\""
         )
-        rows.append({
-            "Timestamp":    ts,
-            "Event ID":     eid,
-            "Severity":     sev,
-            "Category":     category,
-            "Source":       src,
-            "Protocol":     proto,
-            "Action":       action,
-            "MITRE Tactic": mitre,
-            "Message":      msg,
-            "Anomaly Score": anomaly,
-            "Anomaly":      "YES" if anomaly >= 70 else "NO",
-            "_raw":         raw,
-        })
-    df = pd.DataFrame(rows)
-    df.sort_values("Timestamp", ascending=False, inplace=True)
-    df.reset_index(drop=True, inplace=True)
-    return df
+        rows.append(_make_row(ts, eid, sev, category, src, proto, action, mitre, msg, anomaly, raw))
+    rows.sort(key=lambda r: r["Timestamp"], reverse=True)
+    return rows
 
 
 # ---------------------------------------------------------------------------
-# LOG FILE PARSERS
+# LOG FILE PARSERS (pure Python, no pandas)
 # ---------------------------------------------------------------------------
 
 _SEV_KEYWORDS = {
-    "critical": "CRITICAL", "crit": "CRITICAL",
-    "error": "HIGH",    "err": "HIGH",
-    "warning": "MEDIUM","warn": "MEDIUM",
+    "critical": "CRITICAL", "crit": "CRITICAL", "emergency": "CRITICAL", "emerg": "CRITICAL",
+    "error": "HIGH", "err": "HIGH", "alert": "HIGH",
+    "warning": "MEDIUM", "warn": "MEDIUM",
     "notice": "LOW",
-    "info": "INFO",     "information": "INFO",
+    "info": "INFO", "information": "INFO",
     "debug": "DEBUG",
 }
 
-_SYSLOG_RE   = re.compile(
+_SYSLOG_RE = re.compile(
     r"^(?P<ts>\w{3}\s+\d+\s+[\d:]+)\s+(?P<host>\S+)\s+(?P<proc>[^:]+):\s*(?P<msg>.*)$"
 )
-_APACHE_RE   = re.compile(
+_APACHE_RE = re.compile(
     r'^(?P<ip>\S+)\s+\S+\s+\S+\s+\[(?P<ts>[^\]]+)\]\s+"(?P<req>[^"]+)"\s+(?P<status>\d+)\s+\S+',
 )
-_WIN_RE      = re.compile(
-    r"(?:EventID|Event ID)[:\s]+(?P<eid>\d+).*?(?:Level|Severity)[:\s]+(?P<sev>\w+)",
-    re.IGNORECASE,
-)
-_BRACKET_RE  = re.compile(
-    r"\[(?P<ts>[\d\-T: ]+)\]\s*\[?(?P<sev>\w+)\]?\s*(?P<msg>.*)"
-)
-_GENERIC_TS  = re.compile(
+_GENERIC_TS = re.compile(
     r"(?P<ts>\d{4}[-/]\d{2}[-/]\d{2}[T \t]\d{2}:\d{2}:\d{2})"
+)
+_BRACKET_RE = re.compile(
+    r"\[(?P<ts>[\d\-T: .]+)\]\s*\[?(?P<sev>\w+)\]?\s*(?P<msg>.*)"
 )
 
 
@@ -205,7 +214,29 @@ def _detect_severity(text: str) -> str:
     return "INFO"
 
 
-def _parse_syslog(lines: list[str]) -> pd.DataFrame:
+def _generic_row(line: str) -> dict[str, Any]:
+    ts = datetime.now()
+    m_ts = _GENERIC_TS.search(line)
+    if m_ts:
+        try:
+            ts = datetime.fromisoformat(m_ts.group("ts").replace(" ", "T").replace("/", "-"))
+        except ValueError:
+            pass
+    m_br = _BRACKET_RE.match(line)
+    if m_br:
+        sev_raw = m_br.group("sev").upper()
+        sev = sev_raw if sev_raw in SEVERITIES else _detect_severity(line)
+        msg = m_br.group("msg")
+    else:
+        sev = _detect_severity(line)
+        msg = line[:300]
+    src_m = re.search(r"\b(?:src|host|ip|from)[=:\s]+(\S+)", line, re.IGNORECASE)
+    src = src_m.group(1) if src_m else "unknown"
+    anomaly = 70 if sev in ("CRITICAL",) else 55 if sev == "HIGH" else 10
+    return _make_row(ts, 0, sev, "System", src, "N/A", "LOG", "N/A", msg, anomaly, line)
+
+
+def _parse_lines_syslog(lines: list[str]) -> list[dict[str, Any]]:
     rows = []
     for line in lines:
         line = line.strip()
@@ -213,25 +244,22 @@ def _parse_syslog(lines: list[str]) -> pd.DataFrame:
             continue
         m = _SYSLOG_RE.match(line)
         if m:
-            ts_raw = m.group("ts")
             try:
-                ts = datetime.strptime(f"{datetime.now().year} {ts_raw}", "%Y %b %d %H:%M:%S")
+                ts = datetime.strptime(f"{datetime.now().year} {m.group('ts')}", "%Y %b %d %H:%M:%S")
             except ValueError:
                 ts = datetime.now()
-            rows.append({
-                "Timestamp": ts, "Source": m.group("host"),
-                "Message": m.group("msg"), "Severity": _detect_severity(m.group("msg")),
-                "Category": "System", "Protocol": "N/A", "Action": "LOG",
-                "MITRE Tactic": "N/A", "Event ID": 0,
-                "Anomaly Score": 10 if _detect_severity(m.group("msg")) == "INFO" else 50,
-                "Anomaly": "NO", "_raw": line,
-            })
+            sev = _detect_severity(m.group("msg"))
+            anomaly = 70 if sev == "CRITICAL" else 55 if sev == "HIGH" else 10
+            rows.append(_make_row(
+                ts, 0, sev, "System", m.group("host"), "N/A", "LOG", "N/A",
+                m.group("msg"), anomaly, line
+            ))
         else:
             rows.append(_generic_row(line))
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    return rows
 
 
-def _parse_apache(lines: list[str]) -> pd.DataFrame:
+def _parse_lines_apache(lines: list[str]) -> list[dict[str, Any]]:
     rows = []
     for line in lines:
         line = line.strip()
@@ -245,150 +273,116 @@ def _parse_apache(lines: list[str]) -> pd.DataFrame:
                 ts = datetime.strptime(m.group("ts").split()[0], "%d/%b/%Y:%H:%M:%S")
             except ValueError:
                 ts = datetime.now()
-            rows.append({
-                "Timestamp": ts, "Source": m.group("ip"),
-                "Message": f"{m.group('req')} → HTTP {status}",
-                "Severity": sev, "Category": "Network",
-                "Protocol": "HTTP", "Action": "LOG",
-                "MITRE Tactic": "Initial Access" if status in (401, 403) else "N/A",
-                "Event ID": status,
-                "Anomaly Score": 70 if status >= 400 else 10,
-                "Anomaly": "YES" if status >= 400 else "NO",
-                "_raw": line,
-            })
+            anomaly = 75 if status >= 400 else 10
+            mitre = "Initial Access" if status in (401, 403) else "N/A"
+            rows.append(_make_row(
+                ts, status, sev, "Network", m.group("ip"), "HTTP", "LOG",
+                mitre, f"{m.group('req')} → HTTP {status}", anomaly, line
+            ))
         else:
             rows.append(_generic_row(line))
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    return rows
 
 
-def _parse_json_logs(text: str) -> pd.DataFrame:
+def _parse_json_text(text: str) -> list[dict[str, Any]]:
     rows = []
-    for i, line in enumerate(text.splitlines()):
-        line = line.strip().rstrip(",")
-        if not line or line in ("{", "}", "[", "]"):
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        ts_raw = (obj.get("timestamp") or obj.get("time") or
-                  obj.get("@timestamp") or obj.get("date") or "")
+    # Try JSON array first
+    try:
+        data = json.loads(text)
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            items = [data]
+        else:
+            items = []
+    except json.JSONDecodeError:
+        # Try NDJSON (line-delimited)
+        items = []
+        for line in text.splitlines():
+            line = line.strip().rstrip(",")
+            if not line or line in ("{", "}", "[", "]"):
+                continue
+            try:
+                items.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+
+    for i, obj in enumerate(items):
+        ts_raw = (obj.get("timestamp") or obj.get("time") or obj.get("@timestamp") or obj.get("date") or "")
         try:
             ts = datetime.fromisoformat(str(ts_raw).replace("Z", ""))
         except Exception:
             ts = datetime.now() - timedelta(minutes=i)
-        msg = (obj.get("message") or obj.get("msg") or
-               obj.get("event") or str(obj))
-        sev_raw = (obj.get("level") or obj.get("severity") or
-                   obj.get("log_level") or "INFO")
-        sev = _SEV_KEYWORDS.get(str(sev_raw).lower(), "INFO")
-        rows.append({
-            "Timestamp": ts,
-            "Source":   str(obj.get("host") or obj.get("source") or obj.get("src") or "uploaded"),
-            "Message":  str(msg)[:300],
-            "Severity": sev,
-            "Category": str(obj.get("category") or obj.get("type") or "System"),
-            "Protocol": str(obj.get("protocol") or obj.get("proto") or "N/A"),
-            "Action":   str(obj.get("action") or obj.get("outcome") or "LOG"),
-            "MITRE Tactic": str(obj.get("mitre_tactic") or "N/A"),
-            "Event ID": int(obj.get("event_id") or obj.get("eventid") or 0),
-            "Anomaly Score": 50 if sev in ("CRITICAL", "HIGH") else 10,
-            "Anomaly": "YES" if sev in ("CRITICAL", "HIGH") else "NO",
-            "_raw": line,
-        })
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
-
-
-def _parse_csv_logs(text: str) -> pd.DataFrame:
-    try:
-        df = pd.read_csv(StringIO(text))
-    except Exception:
-        return pd.DataFrame()
-    # Normalise common column aliases
-    col_map = {}
-    for c in df.columns:
-        cl = c.lower().replace(" ", "_")
-        if cl in ("ts", "time", "datetime", "@timestamp", "date"):
-            col_map[c] = "Timestamp"
-        elif cl in ("severity", "level", "log_level", "priority"):
-            col_map[c] = "Severity"
-        elif cl in ("src", "source_ip", "host", "hostname", "source"):
-            col_map[c] = "Source"
-        elif cl in ("msg", "message", "description", "event"):
-            col_map[c] = "Message"
-        elif cl in ("cat", "category", "type"):
-            col_map[c] = "Category"
-        elif cl in ("proto", "protocol"):
-            col_map[c] = "Protocol"
-        elif cl in ("action", "outcome", "response"):
-            col_map[c] = "Action"
-        elif cl in ("event_id", "eventid", "id"):
-            col_map[c] = "Event ID"
-    df.rename(columns=col_map, inplace=True)
-    defaults = {
-        "Timestamp": datetime.now(), "Severity": "INFO",
-        "Source": "uploaded", "Message": "N/A",
-        "Category": "System", "Protocol": "N/A",
-        "Action": "LOG", "MITRE Tactic": "N/A",
-        "Event ID": 0, "Anomaly Score": 10, "Anomaly": "NO",
-        "_raw": "",
-    }
-    for col, default in defaults.items():
-        if col not in df.columns:
-            df[col] = default
-    if "Severity" in df.columns:
-        df["Severity"] = df["Severity"].apply(
-            lambda v: _SEV_KEYWORDS.get(str(v).lower(), str(v).upper()[:8])
-        )
-    if "_raw" not in df.columns or df["_raw"].eq("").all():
-        df["_raw"] = df["Message"].astype(str)
-    try:
-        df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    except Exception:
-        df["Timestamp"] = datetime.now()
-    return df
-
-
-def _generic_row(line: str) -> dict[str, Any]:
-    """Fallback parser for unrecognised lines."""
-    ts = datetime.now()
-    m_ts = _GENERIC_TS.search(line)
-    if m_ts:
+        msg = str(obj.get("message") or obj.get("msg") or obj.get("event") or str(obj))[:300]
+        sev_raw = str(obj.get("level") or obj.get("severity") or obj.get("log_level") or "INFO").lower()
+        sev = _SEV_KEYWORDS.get(sev_raw, "INFO")
+        src = str(obj.get("host") or obj.get("source") or obj.get("src") or "uploaded")
+        proto = str(obj.get("protocol") or obj.get("proto") or "N/A")
+        action_val = str(obj.get("action") or obj.get("outcome") or "LOG")
+        mitre = str(obj.get("mitre_tactic") or "N/A")
         try:
-            ts = datetime.fromisoformat(m_ts.group("ts").replace(" ", "T"))
-        except ValueError:
-            pass
-    m_br = _BRACKET_RE.match(line)
-    if m_br:
-        sev_raw = m_br.group("sev").upper()
-        sev = sev_raw if sev_raw in SEVERITIES else _detect_severity(line)
-        msg = m_br.group("msg")
-    else:
-        sev = _detect_severity(line)
-        msg = line[:300]
-
-    src_m = re.search(r"\b(?:src|host|ip)[=:\s]+(\S+)", line, re.IGNORECASE)
-    src = src_m.group(1) if src_m else "unknown"
-    anomaly = 60 if sev in ("CRITICAL", "HIGH") else 10
-    return {
-        "Timestamp": ts, "Source": src, "Message": msg,
-        "Severity": sev, "Category": "System",
-        "Protocol": "N/A", "Action": "LOG",
-        "MITRE Tactic": "N/A", "Event ID": 0,
-        "Anomaly Score": anomaly,
-        "Anomaly": "YES" if anomaly >= 70 else "NO",
-        "_raw": line,
-    }
+            eid = int(obj.get("event_id") or obj.get("eventid") or 0)
+        except (ValueError, TypeError):
+            eid = 0
+        cat = str(obj.get("category") or obj.get("type") or "System")
+        anomaly = 70 if sev in ("CRITICAL", "HIGH") else 10
+        rows.append(_make_row(ts, eid, sev, cat, src, proto, action_val, mitre, msg, anomaly, json.dumps(obj)))
+    return rows
 
 
-def _parse_raw_text(lines: list[str]) -> pd.DataFrame:
-    """Generic line-by-line parser used as final fallback."""
-    rows = [_generic_row(ln) for ln in lines if ln.strip()]
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+def _parse_csv_text(text: str) -> list[dict[str, Any]]:
+    rows = []
+    reader = csv.DictReader(StringIO(text))
+    if reader.fieldnames is None:
+        return rows
+    # Build column alias map
+    col_map: dict[str, str] = {}
+    for c in reader.fieldnames:
+        cl = c.lower().replace(" ", "_").strip()
+        if cl in ("ts", "time", "datetime", "@timestamp", "date", "timestamp"):
+            col_map["timestamp"] = c
+        elif cl in ("severity", "level", "log_level", "priority"):
+            col_map["severity"] = c
+        elif cl in ("src", "source_ip", "host", "hostname", "source"):
+            col_map["source"] = c
+        elif cl in ("msg", "message", "description", "event"):
+            col_map["message"] = c
+        elif cl in ("cat", "category", "type"):
+            col_map["category"] = c
+        elif cl in ("proto", "protocol"):
+            col_map["protocol"] = c
+        elif cl in ("action", "outcome", "response"):
+            col_map["action"] = c
+        elif cl in ("event_id", "eventid", "id"):
+            col_map["event_id"] = c
+
+    for i, row_dict in enumerate(reader):
+        ts_raw = row_dict.get(col_map.get("timestamp", ""), "")
+        try:
+            ts = datetime.fromisoformat(str(ts_raw).replace("Z", "").replace("/", "-"))
+        except Exception:
+            ts = datetime.now() - timedelta(minutes=i)
+        msg = row_dict.get(col_map.get("message", ""), str(row_dict))[:300]
+        sev_raw = row_dict.get(col_map.get("severity", ""), "INFO").lower()
+        sev = _SEV_KEYWORDS.get(sev_raw, sev_raw.upper()[:8] if sev_raw else "INFO")
+        if sev not in SEVERITIES:
+            sev = "INFO"
+        src = row_dict.get(col_map.get("source", ""), "uploaded")
+        proto = row_dict.get(col_map.get("protocol", ""), "N/A")
+        action_val = row_dict.get(col_map.get("action", ""), "LOG")
+        cat = row_dict.get(col_map.get("category", ""), "System")
+        try:
+            eid = int(row_dict.get(col_map.get("event_id", ""), 0))
+        except (ValueError, TypeError):
+            eid = 0
+        anomaly = 70 if sev in ("CRITICAL", "HIGH") else 10
+        raw_line = ",".join(f"{v}" for v in row_dict.values())
+        rows.append(_make_row(ts, eid, sev, cat, src, proto, action_val, "N/A", msg, anomaly, raw_line))
+    return rows
 
 
-def _parse_uploaded_file(uploaded_file) -> pd.DataFrame:
-    """Detect format and parse an uploaded log file into a DataFrame."""
+def _parse_uploaded_file(uploaded_file) -> list[dict[str, Any]]:
+    """Detect format and parse an uploaded log file into a list of row dicts."""
     name = uploaded_file.name.lower()
     raw_bytes = uploaded_file.read()
     try:
@@ -397,30 +391,32 @@ def _parse_uploaded_file(uploaded_file) -> pd.DataFrame:
         text = raw_bytes.decode("latin-1", errors="replace")
 
     lines = text.splitlines()
+    if not lines:
+        return []
 
     # JSON / NDJSON
     if name.endswith(".json") or name.endswith(".ndjson"):
-        df = _parse_json_logs(text)
-        if not df.empty:
-            return df
+        result = _parse_json_text(text)
+        if result:
+            return result
 
     # CSV
     if name.endswith(".csv"):
-        df = _parse_csv_logs(text)
-        if not df.empty:
-            return df
+        result = _parse_csv_text(text)
+        if result:
+            return result
 
     # Apache / Nginx access log heuristic
-    if lines and _APACHE_RE.match(lines[0].strip()):
-        df = _parse_apache(lines)
-        if not df.empty:
-            return df
+    if _APACHE_RE.match(lines[0].strip()):
+        result = _parse_lines_apache(lines)
+        if result:
+            return result
 
     # Syslog heuristic
-    if lines and _SYSLOG_RE.match(lines[0].strip()):
-        df = _parse_syslog(lines)
-        if not df.empty:
-            return df
+    if _SYSLOG_RE.match(lines[0].strip()):
+        result = _parse_lines_syslog(lines)
+        if result:
+            return result
 
     # JSON array wrapped in brackets
     if text.strip().startswith("["):
@@ -428,91 +424,152 @@ def _parse_uploaded_file(uploaded_file) -> pd.DataFrame:
             objs = json.loads(text)
             if isinstance(objs, list):
                 ndjson = "\n".join(json.dumps(o) for o in objs)
-                df = _parse_json_logs(ndjson)
-                if not df.empty:
-                    return df
+                result = _parse_json_text(ndjson)
+                if result:
+                    return result
         except Exception:
             pass
 
-    # Generic / Windows Event text export / unknown .log/.txt
-    return _parse_raw_text(lines)
+    # Generic / Windows Event text export / unknown
+    return [_generic_row(ln) for ln in lines if ln.strip()]
 
 
 # ---------------------------------------------------------------------------
-# ENSURE REQUIRED COLUMNS
+# FILTER LOGIC (pure Python)
 # ---------------------------------------------------------------------------
 
-_REQUIRED_COLS = {
-    "Timestamp": datetime.now(),
-    "Event ID": 0,
-    "Severity": "INFO",
-    "Category": "System",
-    "Source": "unknown",
-    "Protocol": "N/A",
-    "Action": "LOG",
-    "MITRE Tactic": "N/A",
-    "Message": "",
-    "Anomaly Score": 10,
-    "Anomaly": "NO",
-    "_raw": "",
-}
+def _apply_filters(rows: list[dict[str, Any]], filters: dict) -> list[dict[str, Any]]:
+    result = rows
 
-
-def _ensure_cols(df: pd.DataFrame) -> pd.DataFrame:
-    for col, default in _REQUIRED_COLS.items():
-        if col not in df.columns:
-            df[col] = default
-    try:
-        df["Timestamp"] = pd.to_datetime(df["Timestamp"])
-    except Exception:
-        df["Timestamp"] = datetime.now()
-    df["Anomaly Score"] = pd.to_numeric(df["Anomaly Score"], errors="coerce").fillna(10)
-    df["Event ID"]      = pd.to_numeric(df["Event ID"], errors="coerce").fillna(0).astype(int)
-    return df
-
-
-# ---------------------------------------------------------------------------
-# FILTER LOGIC
-# ---------------------------------------------------------------------------
-
-def _apply_filters(df: pd.DataFrame, filters: dict) -> pd.DataFrame:
     # Time window
     hours = filters["hours"]
     if hours > 0:
         cutoff = datetime.now() - timedelta(hours=hours)
-        df = df[df["Timestamp"] >= cutoff]
+        result = [r for r in result if r["Timestamp"] >= cutoff]
 
     if filters["sev"]:
-        df = df[df["Severity"].isin(filters["sev"])]
+        sev_set = set(filters["sev"])
+        result = [r for r in result if r["Severity"] in sev_set]
     if filters["cat"]:
-        df = df[df["Category"].isin(filters["cat"])]
+        cat_set = set(filters["cat"])
+        result = [r for r in result if r["Category"] in cat_set]
     if filters["proto"]:
-        df = df[df["Protocol"].isin(filters["proto"])]
+        proto_set = set(filters["proto"])
+        result = [r for r in result if r["Protocol"] in proto_set]
     if filters["action"]:
-        df = df[df["Action"].isin(filters["action"])]
+        action_set = set(filters["action"])
+        result = [r for r in result if r["Action"] in action_set]
     if filters["mitre"]:
-        df = df[df["MITRE Tactic"].isin(filters["mitre"])]
+        mitre_set = set(filters["mitre"])
+        result = [r for r in result if r["MITRE Tactic"] in mitre_set]
 
-    if filters["src"].strip():
-        df = df[df["Source"].astype(str).str.contains(filters["src"].strip(), case=False, na=False)]
+    src_q = filters["src"].strip()
+    if src_q:
+        src_lower = src_q.lower()
+        result = [r for r in result if src_lower in str(r["Source"]).lower()]
 
-    if filters["eid"].strip().isdigit():
-        df = df[df["Event ID"] == int(filters["eid"].strip())]
+    eid_q = filters["eid"].strip()
+    if eid_q.isdigit():
+        eid_int = int(eid_q)
+        result = [r for r in result if r["Event ID"] == eid_int]
 
     kw = filters["keyword"].strip()
     if kw:
         try:
             pattern = re.compile(kw, re.IGNORECASE)
-            df = df[df["Message"].astype(str).str.contains(pattern, na=False)]
+            result = [r for r in result if pattern.search(str(r["Message"]))]
         except re.error:
-            df = df[df["Message"].astype(str).str.contains(kw, case=False, na=False)]
+            kw_lower = kw.lower()
+            result = [r for r in result if kw_lower in str(r["Message"]).lower()]
 
     if filters["anomaly_only"]:
-        df = df[df["Anomaly"] == "YES"]
+        result = [r for r in result if r["Anomaly"] == "YES"]
     if filters["min_anomaly"] > 0:
-        df = df[df["Anomaly Score"] >= filters["min_anomaly"]]
+        threshold = filters["min_anomaly"]
+        result = [r for r in result if r["Anomaly Score"] >= threshold]
 
-    return df
+    return result
+
+
+# ---------------------------------------------------------------------------
+# HELPER: rows → CSV string
+# ---------------------------------------------------------------------------
+
+_DISPLAY_COLS = [
+    "Timestamp", "Event ID", "Severity", "Category",
+    "Source", "Protocol", "Action", "MITRE Tactic",
+    "Anomaly Score", "Anomaly", "Message",
+]
+
+
+def _rows_to_csv(rows: list[dict[str, Any]], columns: list[str] | None = None) -> str:
+    cols = columns or _DISPLAY_COLS
+    buf = StringIO()
+    writer = csv.DictWriter(buf, fieldnames=cols, extrasaction="ignore")
+    writer.writeheader()
+    for r in rows:
+        out = {}
+        for c in cols:
+            val = r.get(c, "")
+            if isinstance(val, datetime):
+                val = val.strftime("%Y-%m-%d %H:%M:%S")
+            out[c] = val
+        writer.writerow(out)
+    return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# HELPER: build table HTML (replaces st.dataframe + Styler)
+# ---------------------------------------------------------------------------
+
+_SEV_COLORS = {
+    "CRITICAL": "#ff0000", "HIGH": "#ff8000", "MEDIUM": "#f3e600",
+    "LOW": "#00ffff", "INFO": "#00ff88", "DEBUG": "#888888",
+}
+
+
+def _build_log_table_html(rows: list[dict[str, Any]], max_rows: int = 100) -> str:
+    """Build an HTML table for the log entries with severity colour coding."""
+    html_parts = [
+        "<div style='max-height:500px;overflow-y:auto;border:1px solid var(--cp-cyan);'>",
+        "<table style='width:100%;border-collapse:collapse;font-family:monospace;font-size:0.78rem;'>",
+        "<thead><tr style='background:rgba(0,255,255,0.08);'>",
+    ]
+    cols = ["Timestamp", "EID", "Severity", "Category", "Source", "Proto", "Action", "MITRE", "Score", "Anom", "Message"]
+    for c in cols:
+        html_parts.append(
+            f"<th style='padding:6px 8px;text-align:left;color:var(--cp-pink);"
+            f"border-bottom:1px solid var(--cp-cyan);text-transform:uppercase;'>{c}</th>"
+        )
+    html_parts.append("</tr></thead><tbody>")
+
+    for i, r in enumerate(rows[:max_rows]):
+        bg = "rgba(0,0,0,0.3)" if i % 2 == 0 else "rgba(0,0,0,0.15)"
+        sev = r.get("Severity", "INFO")
+        sev_color = _SEV_COLORS.get(sev, "#888")
+        ts_str = r["Timestamp"].strftime("%Y-%m-%d %H:%M:%S") if isinstance(r["Timestamp"], datetime) else str(r["Timestamp"])[:19]
+        anomaly_str = "⚠️" if r.get("Anomaly") == "YES" else "—"
+        msg = str(r.get("Message", ""))[:120]
+
+        html_parts.append(f"<tr style='background:{bg};'>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{ts_str}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{r.get('Event ID', 0)}</td>")
+        html_parts.append(
+            f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);"
+            f"color:{sev_color};font-weight:bold;'>{sev}</td>"
+        )
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{r.get('Category', '')}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-cyan);'>{r.get('Source', '')}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{r.get('Protocol', '')}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{r.get('Action', '')}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{r.get('MITRE Tactic', '')}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-yellow);'>{r.get('Anomaly Score', 0)}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);'>{anomaly_str}</td>")
+        html_parts.append(f"<td style='padding:4px 8px;border-bottom:1px solid rgba(0,255,255,0.08);color:var(--cp-text);'>{msg}</td>")
+        html_parts.append("</tr>")
+
+    html_parts.append("</tbody></table></div>")
+    return "".join(html_parts)
 
 
 # ---------------------------------------------------------------------------
@@ -544,45 +601,35 @@ def render() -> None:
             accept_multiple_files=True,
             help=(
                 "Supported: Syslog, Apache/Nginx access logs, Windows Event text export, "
-                "JSON / NDJSON, CSV, generic .log/.txt files. "
-                "Multiple files will be merged."
+                "JSON / NDJSON, CSV, generic .log/.txt files. Multiple files merged."
             ),
             key="la_uploader",
         )
     with src_col2:
         use_sample = st.checkbox(
-            "Use built-in sample data",
+            "Include built-in sample data",
             value=(not bool(uploaded_files)),
             key="la_sample_chk",
-            help="400 synthetic SIEM events covering all categories.",
+            help="300 synthetic SIEM events covering all categories.",
         )
 
-    # Build working DataFrame
-    df_all = pd.DataFrame()
+    # Build working list
+    all_rows: list[dict[str, Any]] = []
 
     if uploaded_files:
-        parsed_frames: list[pd.DataFrame] = []
         for f in uploaded_files:
             with st.spinner(f"Parsing {f.name} …"):
                 parsed = _parse_uploaded_file(f)
-            if parsed.empty:
+            if not parsed:
                 st.warning(f"⚠️ Could not parse **{f.name}** — no rows extracted.")
             else:
                 st.success(f"✅ **{f.name}** — {len(parsed):,} events loaded.")
-                parsed_frames.append(parsed)
-        if parsed_frames:
-            df_all = pd.concat(parsed_frames, ignore_index=True)
+                all_rows.extend(parsed)
 
-    if df_all.empty or use_sample:
-        sample_df = _generate_sample_logs(300)
-        if df_all.empty:
-            df_all = sample_df
-        else:
-            df_all = pd.concat([df_all, sample_df], ignore_index=True)
+    if not all_rows or use_sample:
+        all_rows.extend(_generate_sample_logs(300))
 
-    df_all = _ensure_cols(df_all)
-    df_all.sort_values("Timestamp", ascending=False, inplace=True)
-    df_all.reset_index(drop=True, inplace=True)
+    all_rows.sort(key=lambda r: r["Timestamp"], reverse=True)
 
     st.markdown("---")
 
@@ -596,50 +643,48 @@ def render() -> None:
     )
     st.caption("All active filters combine with AND logic. Leave a filter empty to skip it.")
 
-    with st.container():
-        r1c1, r1c2, r1c3 = st.columns(3)
+    r1c1, r1c2, r1c3 = st.columns(3)
 
-        time_options = {
-            "Last 1 Hour": 1, "Last 6 Hours": 6, "Last 24 Hours": 24,
-            "Last 3 Days": 72, "Last 7 Days": 168, "All Logs": 0,
-        }
-        with r1c1:
-            selected_time = st.selectbox("⏱ Time Window", list(time_options.keys()), index=4, key="la_time")
-        with r1c2:
-            sev_filter = st.multiselect("🚨 Severity", SEVERITIES, default=[], key="la_sev")
-        with r1c3:
-            # Use categories present in data (plus fixed list)
-            present_cats = sorted(df_all["Category"].dropna().unique().tolist())
-            all_cats = sorted(set(CATEGORIES) | set(present_cats))
-            cat_filter = st.multiselect("📂 Category", all_cats, default=[], key="la_cat")
+    time_options = {
+        "Last 1 Hour": 1, "Last 6 Hours": 6, "Last 24 Hours": 24,
+        "Last 3 Days": 72, "Last 7 Days": 168, "All Logs": 0,
+    }
+    with r1c1:
+        selected_time = st.selectbox("⏱ Time Window", list(time_options.keys()), index=4, key="la_time")
+    with r1c2:
+        sev_filter = st.multiselect("🚨 Severity", SEVERITIES, default=[], key="la_sev")
+    with r1c3:
+        present_cats = sorted({r["Category"] for r in all_rows})
+        all_cats = sorted(set(CATEGORIES) | set(present_cats))
+        cat_filter = st.multiselect("📂 Category", all_cats, default=[], key="la_cat")
 
-        r2c1, r2c2, r2c3 = st.columns(3)
-        with r2c1:
-            present_protos = sorted(df_all["Protocol"].dropna().unique().tolist())
-            all_protos = sorted(set(PROTOCOLS) | set(present_protos))
-            proto_filter = st.multiselect("🌐 Protocol", all_protos, default=[], key="la_proto")
-        with r2c2:
-            present_actions = sorted(df_all["Action"].dropna().unique().tolist())
-            all_actions = sorted(set(ACTIONS) | set(present_actions))
-            action_filter = st.multiselect("🛡 Response Action", all_actions, default=[], key="la_action")
-        with r2c3:
-            mitre_filter = st.multiselect("⚔ MITRE ATT&CK Tactic", MITRE_TACTICS, default=[], key="la_mitre")
+    r2c1, r2c2, r2c3 = st.columns(3)
+    with r2c1:
+        present_protos = sorted({r["Protocol"] for r in all_rows})
+        all_protos = sorted(set(PROTOCOLS) | set(present_protos))
+        proto_filter = st.multiselect("🌐 Protocol", all_protos, default=[], key="la_proto")
+    with r2c2:
+        present_actions = sorted({r["Action"] for r in all_rows})
+        all_actions = sorted(set(ACTIONS) | set(present_actions))
+        action_filter = st.multiselect("🛡 Response Action", all_actions, default=[], key="la_action")
+    with r2c3:
+        mitre_filter = st.multiselect("⚔ MITRE ATT&CK Tactic", MITRE_TACTICS, default=[], key="la_mitre")
 
-        r3c1, r3c2, r3c3 = st.columns(3)
-        with r3c1:
-            keyword = st.text_input("🔍 Keyword / Regex (in Message)", placeholder="e.g. brute.force|mimikatz", key="la_keyword")
-        with r3c2:
-            src_filter = st.text_input("🖥 Source IP / Host (partial)", placeholder="e.g. 192.168", key="la_src")
-        with r3c3:
-            eid_filter = st.text_input("🆔 Event ID (exact)", placeholder="e.g. 4625", key="la_eid")
+    r3c1, r3c2, r3c3 = st.columns(3)
+    with r3c1:
+        keyword = st.text_input("🔍 Keyword / Regex (in Message)", placeholder="e.g. brute.force|mimikatz", key="la_keyword")
+    with r3c2:
+        src_input = st.text_input("🖥 Source IP / Host (partial)", placeholder="e.g. 192.168", key="la_src")
+    with r3c3:
+        eid_input = st.text_input("🆔 Event ID (exact)", placeholder="e.g. 4625", key="la_eid")
 
-        r4c1, r4c2, r4c3 = st.columns([1, 2, 1])
-        with r4c1:
-            anomaly_only = st.checkbox("⚠️ Anomalies Only", value=False, key="la_anomaly")
-        with r4c2:
-            min_anomaly = st.slider("Min Anomaly Score", 0, 100, 0, 5, key="la_min_anomaly")
-        with r4c3:
-            max_rows = st.selectbox("Max Rows", [50, 100, 200, 500], index=1, key="la_maxrows")
+    r4c1, r4c2, r4c3 = st.columns([1, 2, 1])
+    with r4c1:
+        anomaly_only = st.checkbox("⚠️ Anomalies Only", value=False, key="la_anomaly")
+    with r4c2:
+        min_anomaly = st.slider("Min Anomaly Score", 0, 100, 0, 5, key="la_min_anomaly")
+    with r4c3:
+        max_rows = st.selectbox("Max Rows", [50, 100, 200, 500], index=1, key="la_maxrows")
 
     # -----------------------------------------------------------------------
     # APPLY FILTERS
@@ -648,36 +693,44 @@ def render() -> None:
         "hours": time_options[selected_time],
         "sev": sev_filter, "cat": cat_filter, "proto": proto_filter,
         "action": action_filter, "mitre": mitre_filter,
-        "src": src_filter, "eid": eid_filter, "keyword": keyword,
+        "src": src_input, "eid": eid_input, "keyword": keyword,
         "anomaly_only": anomaly_only, "min_anomaly": min_anomaly,
     }
-    df = _apply_filters(df_all.copy(), filters)
+    filtered = _apply_filters(all_rows, filters)
 
     # -----------------------------------------------------------------------
-    # SUMMARY METRICS BAR
+    # SUMMARY METRICS
     # -----------------------------------------------------------------------
     st.markdown("---")
-    total   = len(df_all)
-    matched = len(df)
-    sc = df["Severity"].value_counts()
+    total = len(all_rows)
+    matched = len(filtered)
+
+    sev_counts: dict[str, int] = {}
+    anomaly_count = 0
+    for r in filtered:
+        sev_counts[r["Severity"]] = sev_counts.get(r["Severity"], 0) + 1
+        if r["Anomaly"] == "YES":
+            anomaly_count += 1
+
     st.markdown(
         f"<p style='color:var(--cp-text);font-size:0.9rem;'>"
         f"📊 <strong style='color:var(--cp-yellow);'>{matched:,}</strong> events matched "
         f"of <strong style='color:var(--cp-yellow);'>{total:,}</strong> total</p>",
         unsafe_allow_html=True,
     )
+
     m1, m2, m3, m4, m5, m6 = st.columns(6)
-    m1.metric("🔴 CRITICAL",  int(sc.get("CRITICAL", 0)))
-    m2.metric("🟠 HIGH",      int(sc.get("HIGH",     0)))
-    m3.metric("🟡 MEDIUM",    int(sc.get("MEDIUM",   0)))
-    m4.metric("🔵 LOW",       int(sc.get("LOW",      0)))
-    m5.metric("🟢 INFO",      int(sc.get("INFO",     0)))
-    m6.metric("⚠️ Anomalies", int((df["Anomaly"] == "YES").sum()))
+    m1.metric("🔴 CRITICAL", sev_counts.get("CRITICAL", 0))
+    m2.metric("🟠 HIGH",     sev_counts.get("HIGH", 0))
+    m3.metric("🟡 MEDIUM",   sev_counts.get("MEDIUM", 0))
+    m4.metric("🔵 LOW",      sev_counts.get("LOW", 0))
+    m5.metric("🟢 INFO",     sev_counts.get("INFO", 0))
+    m6.metric("⚠️ Anomalies", anomaly_count)
 
     # -----------------------------------------------------------------------
     # TABS
     # -----------------------------------------------------------------------
-    if df.empty:
+    if not filtered:
         st.markdown(
             """
             <div style="border:1px dashed #ff00ff;padding:30px;text-align:center;
@@ -693,82 +746,118 @@ def render() -> None:
         )
         return
 
-    tab_table, tab_timeline, tab_breakdown, tab_raw = st.tabs(
-        ["📋 Log Table", "📈 Timeline", "📊 Breakdown", "🖥 Raw Logs"]
+    tab_table, tab_breakdown, tab_raw = st.tabs(
+        ["📋 Log Table", "📊 Breakdown", "🖥 Raw Logs"]
     )
 
     # ── Log Table ──────────────────────────────────────────────────────────
     with tab_table:
-        display_cols = [
-            "Timestamp", "Event ID", "Severity", "Category",
-            "Source", "Protocol", "Action", "MITRE Tactic",
-            "Anomaly Score", "Anomaly", "Message",
-        ]
-        # Only include columns that actually exist
-        display_cols = [c for c in display_cols if c in df.columns]
-        display_df = df[display_cols].head(max_rows).copy()
-        display_df["Timestamp"] = display_df["Timestamp"].astype(str).str[:19]
+        st.markdown(
+            "<p style='font-size:0.82rem;color:var(--cp-cyan);text-transform:uppercase;"
+            "letter-spacing:0.1em;'>Filtered Log Events — Newest First</p>",
+            unsafe_allow_html=True,
+        )
+        table_html = _build_log_table_html(filtered, max_rows)
+        st.markdown(table_html, unsafe_allow_html=True)
 
-        st.dataframe(display_df, use_container_width=True, height=480, hide_index=True)
-
-        csv_buf = StringIO()
-        df.head(max_rows)[display_cols].to_csv(csv_buf, index=False)
+        csv_data = _rows_to_csv(filtered[:max_rows])
         st.download_button(
             "⬇️ Export Filtered Logs (CSV)",
-            data=csv_buf.getvalue(),
+            data=csv_data,
             file_name=f"siem_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv",
             key="la_export_csv",
         )
 
-    # ── Timeline ───────────────────────────────────────────────────────────
-    with tab_timeline:
-        st.markdown("**Events Over Time (hourly buckets)**")
-        tdf = df.copy()
-        tdf["Hour"] = tdf["Timestamp"].dt.floor("h")
-        timeline_counts = (
-            tdf.groupby(["Hour", "Severity"]).size()
-            .reset_index(name="Count")
-        )
-        if not timeline_counts.empty:
-            pivot = (
-                timeline_counts.pivot(index="Hour", columns="Severity", values="Count")
-                .fillna(0)
-            )
-            st.area_chart(pivot, use_container_width=True, height=300)
-        else:
-            st.info("No timeline data for current filters.")
-
-        st.markdown("**Anomaly Score Distribution**")
-        bins = pd.cut(
-            df["Anomaly Score"],
-            bins=[0, 25, 50, 70, 85, 100],
-            labels=["0-25 Normal", "26-50 Low", "51-70 Med", "71-85 High", "86-100 Critical"],
-        )
-        st.bar_chart(bins.value_counts().sort_index(), use_container_width=True, height=220)
-
     # ── Breakdown ──────────────────────────────────────────────────────────
     with tab_breakdown:
         b1, b2 = st.columns(2)
+
         with b1:
+            st.markdown("**Severity Distribution**")
+            sev_data = {}
+            for r in filtered:
+                sev_data[r["Severity"]] = sev_data.get(r["Severity"], 0) + 1
+            if sev_data:
+                for sev_name in SEVERITIES:
+                    cnt = sev_data.get(sev_name, 0)
+                    if cnt > 0:
+                        color = _SEV_COLORS.get(sev_name, "#888")
+                        pct = (cnt / matched) * 100
+                        st.markdown(
+                            f"<div style='margin-bottom:6px;'>"
+                            f"<span style='color:{color};font-weight:bold;width:80px;display:inline-block;'>{sev_name}</span>"
+                            f"<span style='color:var(--cp-text);'>{cnt} ({pct:.1f}%)</span>"
+                            f"<div style='background:rgba(0,255,255,0.1);height:8px;border:1px solid {color};margin-top:2px;'>"
+                            f"<div style='height:100%;width:{pct}%;background:{color};box-shadow:0 0 5px {color};'></div>"
+                            f"</div></div>",
+                            unsafe_allow_html=True,
+                        )
+
+            st.markdown("---")
             st.markdown("**Top Categories**")
-            st.bar_chart(df["Category"].value_counts().head(8), use_container_width=True, height=220)
-            st.markdown("**MITRE ATT&CK Tactic Distribution**")
-            st.bar_chart(df["MITRE Tactic"].value_counts(), use_container_width=True, height=260)
+            cat_data: dict[str, int] = {}
+            for r in filtered:
+                cat_data[r["Category"]] = cat_data.get(r["Category"], 0) + 1
+            for cat_name, cnt in sorted(cat_data.items(), key=lambda x: x[1], reverse=True)[:8]:
+                pct = (cnt / matched) * 100
+                st.markdown(
+                    f"<div style='margin-bottom:4px;'>"
+                    f"<span style='color:var(--cp-pink);'>{cat_name}</span>: "
+                    f"<span style='color:var(--cp-yellow);'>{cnt}</span> "
+                    f"<span style='color:var(--cp-text);font-size:0.8rem;'>({pct:.1f}%)</span></div>",
+                    unsafe_allow_html=True,
+                )
+
         with b2:
-            st.markdown("**Response Action Distribution**")
-            st.bar_chart(df["Action"].value_counts(), use_container_width=True, height=220)
-            st.markdown("**Top 10 Source IPs / Hosts**")
-            st.bar_chart(df["Source"].value_counts().head(10), use_container_width=True, height=260)
+            st.markdown("**MITRE ATT&CK Tactic Distribution**")
+            mitre_data: dict[str, int] = {}
+            for r in filtered:
+                mitre_data[r["MITRE Tactic"]] = mitre_data.get(r["MITRE Tactic"], 0) + 1
+            for tactic, cnt in sorted(mitre_data.items(), key=lambda x: x[1], reverse=True):
+                pct = (cnt / matched) * 100
+                st.markdown(
+                    f"<div style='margin-bottom:4px;'>"
+                    f"<span style='color:var(--cp-cyan);'>{tactic}</span>: "
+                    f"<span style='color:var(--cp-yellow);'>{cnt}</span> "
+                    f"<span style='color:var(--cp-text);font-size:0.8rem;'>({pct:.1f}%)</span></div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+            st.markdown("**Top 10 Sources**")
+            src_data: dict[str, int] = {}
+            for r in filtered:
+                src_data[r["Source"]] = src_data.get(r["Source"], 0) + 1
+            for src_name, cnt in sorted(src_data.items(), key=lambda x: x[1], reverse=True)[:10]:
+                st.markdown(
+                    f"<div style='margin-bottom:4px;'>"
+                    f"<span style='color:var(--cp-cyan);font-family:monospace;'>{src_name}</span>: "
+                    f"<span style='color:var(--cp-yellow);'>{cnt}</span></div>",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+            st.markdown("**Response Actions**")
+            act_data: dict[str, int] = {}
+            for r in filtered:
+                act_data[r["Action"]] = act_data.get(r["Action"], 0) + 1
+            for act_name, cnt in sorted(act_data.items(), key=lambda x: x[1], reverse=True):
+                st.markdown(
+                    f"<div style='margin-bottom:4px;'>"
+                    f"<span style='color:var(--cp-pink);'>{act_name}</span>: "
+                    f"<span style='color:var(--cp-yellow);'>{cnt}</span></div>",
+                    unsafe_allow_html=True,
+                )
 
     # ── Raw Logs ───────────────────────────────────────────────────────────
     with tab_raw:
         st.markdown(
             "<p style='font-size:0.82rem;color:var(--cp-cyan);'>Raw log lines for "
-            f"the first <strong>50</strong> matched events.</p>",
+            "the first <strong>50</strong> matched events.</p>",
             unsafe_allow_html=True,
         )
-        raw_lines = "\n".join(df["_raw"].head(50).astype(str).tolist())
+        raw_lines = "\n".join(str(r["_raw"]) for r in filtered[:50])
         st.code(raw_lines, language="text")
         st.download_button(
             "⬇️ Export Raw Logs (.log)",
